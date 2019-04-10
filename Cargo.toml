@@ -1,0 +1,16 @@
+[package]
+name = "bls12-381"
+version = "0.9.0"
+authors = ["Michael Lodder <redmike7@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.6.5"
+oldrand = { version = "0.4.2", package = "rand"}
+amcl = { version = "0.2.0", features = ["bls381"] }
+blake2 = "0.8.0"
+clap = "2.33.0"
+
+[dependencies.pairing]
+git = "https://github.com/mmaker/pairing"
+branch = "feature/hashing"
