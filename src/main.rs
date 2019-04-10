@@ -38,13 +38,14 @@ fn run_apache_test(iterations: usize, message: &[u8]) {
     println!("------------------");
     let mut signatures = Vec::with_capacity(iterations);
     let mut signkeys = Vec::with_capacity(iterations);
+    for _ in 0..iterations {
+        signkeys.push(apache::SignKey::new());
+    }
     print!("Generating - {} signatures...", iterations);
     io::stdout().flush().unwrap();
     let start = Instant::now();
-    for _ in 0..iterations {
-        let sk = apache::SignKey::new();
-        let sig = apache::Bls::sign(message, &sk);
-        signkeys.push(sk);
+    for i in 0..iterations {
+        let sig = apache::Bls::sign(message, &signkeys[i]);
         signatures.push(sig);
     }
     let elapsed = Instant::now() - start;
@@ -55,15 +56,17 @@ fn run_apache_test(iterations: usize, message: &[u8]) {
     let mut verkeys = Vec::with_capacity(iterations);
     let mut results = Vec::with_capacity(iterations);
     let g = apache::Generator::new();
+    for i in 0..iterations {
+        verkeys.push(apache::VerKey::new_with_generator(&g, &signkeys[i]));
+    }
     let start = Instant::now();
     for i in 0..iterations {
-        let vk = apache::VerKey::new_with_generator(&g, &signkeys[i]);
-        let res = apache::Bls::verify(message, &g, &signatures[i], &vk);
-        verkeys.push(vk);
+        let res = apache::Bls::verify(message, &g, &signatures[i], &verkeys[i]);
         results.push(res);
     }
     let elapsed = Instant::now() - start;
     println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
+    assert!(results.iter().fold(true, |acc, t| acc && *t));
 //    print!("Signature verification = [");
 //    io::stdout().flush().unwrap();
 //    let mut sep = "";
@@ -81,7 +84,7 @@ fn run_apache_test(iterations: usize, message: &[u8]) {
     io::stdout().flush().unwrap();
     let start = Instant::now();
     let asig = apache::AggregatedSignature::from_signatures(signatures.as_slice());
-    asig.verify(message, &g, verkeys.as_slice());
+    assert!(asig.verify(message, &g, verkeys.as_slice()));
 //    let result = asig.verify(message, &g, verkeys.as_slice());
     let elapsed = Instant::now() - start;
     println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
@@ -95,13 +98,14 @@ fn run_librustzcash(iterations: usize, message: &[u8]) {
     println!("-----------------");
     let mut signatures = Vec::with_capacity(iterations);
     let mut signkeys = Vec::with_capacity(iterations);
+    for _ in 0..iterations {
+        signkeys.push(librustzcash::SignKey::<pairing::bls12_381::Bls12>::new());
+    }
     print!("Generating - {} signatures...", iterations);
     io::stdout().flush().unwrap();
     let start = Instant::now();
-    for _ in 0..iterations {
-        let sk = librustzcash::SignKey::<pairing::bls12_381::Bls12>::new();
-        let sig = librustzcash::Bls::sign(message, &sk);
-        signkeys.push(sk);
+    for i in 0..iterations {
+        let sig = librustzcash::Bls::sign(message, &signkeys[i]);
         signatures.push(sig);
     }
     let elapsed = Instant::now() - start;
@@ -112,15 +116,17 @@ fn run_librustzcash(iterations: usize, message: &[u8]) {
     let mut verkeys = Vec::with_capacity(iterations);
     let mut results = Vec::with_capacity(iterations);
     let g = librustzcash::Generator::<pairing::bls12_381::Bls12>::new();
+    for i in 0..iterations {
+        verkeys.push(librustzcash::VerKey::new_with_generator(&g,&signkeys[i]));
+    }
     let start = Instant::now();
     for i in 0..iterations {
-        let vk = librustzcash::VerKey::new_with_generator(&g,&signkeys[i]);
-        let res = librustzcash::Bls::verify(message, &g, &signatures[i], &vk);
-        verkeys.push(vk);
+        let res = librustzcash::Bls::verify(message, &g, &signatures[i], &verkeys[i]);
         results.push(res);
     }
     let elapsed = Instant::now() - start;
     println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
+    assert!(results.iter().fold(true, |acc, t| acc && *t));
 //    print!("Signature verification = [");
 //    io::stdout().flush().unwrap();
 //    let mut sep = "";
@@ -138,7 +144,7 @@ fn run_librustzcash(iterations: usize, message: &[u8]) {
     io::stdout().flush().unwrap();
     let start = Instant::now();
     let asig = librustzcash::AggregatedSignature::from_signatures(signatures.as_slice());
-    asig.verify(message, &g, verkeys.as_slice());
+    assert!(asig.verify(message, &g, verkeys.as_slice()));
 //    let result = asig.verify(message, &g, verkeys.as_slice());
     let elapsed = Instant::now() - start;
     println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
