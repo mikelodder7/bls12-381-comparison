@@ -44,8 +44,8 @@ fn run_apache_test(iterations: usize, message: &[u8]) {
     print!("Generating - {} signatures...", iterations);
     io::stdout().flush().unwrap();
     let start = Instant::now();
-    for i in 0..iterations {
-        let sig = apache::Bls::sign(message, &signkeys[i]);
+    for key in &signkeys {
+        let sig = apache::Bls::sign(message, key);
         signatures.push(sig);
     }
     let elapsed = Instant::now() - start;
@@ -56,8 +56,8 @@ fn run_apache_test(iterations: usize, message: &[u8]) {
     let mut verkeys = Vec::with_capacity(iterations);
     let mut results = Vec::with_capacity(iterations);
     let g = apache::Generator::new();
-    for i in 0..iterations {
-        verkeys.push(apache::VerKey::new_with_generator(&g, &signkeys[i]));
+    for key in &signkeys {
+        verkeys.push(apache::VerKey::new_with_generator(&g, key));
     }
     let start = Instant::now();
     for i in 0..iterations {
@@ -66,29 +66,31 @@ fn run_apache_test(iterations: usize, message: &[u8]) {
     }
     let elapsed = Instant::now() - start;
     println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
-    assert!(results.iter().fold(true, |acc, t| acc && *t));
-//    print!("Signature verification = [");
-//    io::stdout().flush().unwrap();
-//    let mut sep = "";
-//    for i in 0..iterations {
-//        if !results[i] {
-//            print!("{}{}=false", sep, i);
-//            io::stdout().flush().unwrap();
-//            sep = "\n";
-//        }
-//
-//    }
-//    println!("]");
+    assert!(results.iter().all(|t| *t));
+
+    print!("Verifying - multisignature...");
+    io::stdout().flush().unwrap();
+    let start = Instant::now();
+    let msig = apache::MultiSignature::from_signatures(signatures.as_slice());
+    assert!(msig.verify(message, &g, verkeys.as_slice()));
+    let elapsed = Instant::now() - start;
+    println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
 
     print!("Verifying - aggregated signature...");
     io::stdout().flush().unwrap();
+    let mut messages = Vec::with_capacity(iterations);
+    for i in 0..iterations {
+        let msg = format!("Message {} {}", String::from_utf8(message.to_vec()).unwrap(), i);
+        let signature = apache::Bls::sign(&msg.as_bytes(), &signkeys[i]);
+        signatures[i] = signature;
+        messages.push(msg);
+    }
+    let inputs = messages.iter().zip(verkeys.iter()).map(|(s, k)| (s.as_bytes(), k)).collect::<Vec<(&[u8], &apache::VerKey)>>();
     let start = Instant::now();
     let asig = apache::AggregatedSignature::from_signatures(signatures.as_slice());
-    assert!(asig.verify(message, &g, verkeys.as_slice()));
-//    let result = asig.verify(message, &g, verkeys.as_slice());
+    assert!(asig.verify(&g, inputs.as_slice()));
     let elapsed = Instant::now() - start;
     println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
-//    println!("AggregatedSignature.verify = {}", result);
     println!("================================================================================");
 }
 
@@ -104,8 +106,8 @@ fn run_librustzcash(iterations: usize, message: &[u8]) {
     print!("Generating - {} signatures...", iterations);
     io::stdout().flush().unwrap();
     let start = Instant::now();
-    for i in 0..iterations {
-        let sig = librustzcash::Bls::sign(message, &signkeys[i]);
+    for key in &signkeys {
+        let sig = librustzcash::Bls::sign(message, key);
         signatures.push(sig);
     }
     let elapsed = Instant::now() - start;
@@ -116,8 +118,8 @@ fn run_librustzcash(iterations: usize, message: &[u8]) {
     let mut verkeys = Vec::with_capacity(iterations);
     let mut results = Vec::with_capacity(iterations);
     let g = librustzcash::Generator::<pairing::bls12_381::Bls12>::new();
-    for i in 0..iterations {
-        verkeys.push(librustzcash::VerKey::new_with_generator(&g,&signkeys[i]));
+    for key in &signkeys {
+        verkeys.push(librustzcash::VerKey::new_with_generator(&g,key));
     }
     let start = Instant::now();
     for i in 0..iterations {
@@ -126,34 +128,36 @@ fn run_librustzcash(iterations: usize, message: &[u8]) {
     }
     let elapsed = Instant::now() - start;
     println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
-    assert!(results.iter().fold(true, |acc, t| acc && *t));
-//    print!("Signature verification = [");
-//    io::stdout().flush().unwrap();
-//    let mut sep = "";
-//    for i in 0..iterations {
-//        if !results[i] {
-//            print!("{}{}=false", sep, i);
-//            io::stdout().flush().unwrap();
-//            sep = "\n";
-//        }
-//
-//    }
-//    println!("]");
+    assert!(results.iter().all(|t| *t));
+
+    print!("Verifying - multisignature...");
+    io::stdout().flush().unwrap();
+    let start = Instant::now();
+    let asig = librustzcash::MultiSignature::from_signatures(signatures.as_slice());
+    assert!(asig.verify(message, &g, verkeys.as_slice()));
+    let elapsed = Instant::now() - start;
+    println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
 
     print!("Verifying - aggregated signature...");
     io::stdout().flush().unwrap();
+    let mut messages = Vec::with_capacity(iterations);
+    for i in 0..iterations {
+        let msg = format!("Message {} {}", String::from_utf8(message.to_vec()).unwrap(), i);
+        let signature = librustzcash::Bls::sign(&msg.as_bytes(), &signkeys[i]);
+        signatures[i] = signature;
+        messages.push(msg);
+    }
+    let inputs = messages.iter().zip(verkeys.iter()).map(|(s, k)| (s.as_bytes(), k)).collect::<Vec<(&[u8], &librustzcash::VerKey<pairing::bls12_381::Bls12>)>>();
     let start = Instant::now();
     let asig = librustzcash::AggregatedSignature::from_signatures(signatures.as_slice());
-    assert!(asig.verify(message, &g, verkeys.as_slice()));
-//    let result = asig.verify(message, &g, verkeys.as_slice());
+    assert!(asig.verify(&g, inputs.as_slice()));
     let elapsed = Instant::now() - start;
     println!("{}.{:0<2}s", elapsed.as_millis() / 1000, (elapsed.as_millis() % 1000) / 10);
-//    println!("AggregatedSignature.verify = {}", result);
     println!("================================================================================");
 }
 
 mod librustzcash {
-    use pairing::{Engine, CurveAffine, CurveProjective};
+    use pairing::{Engine, CurveAffine, CurveProjective, Field};
     use oldrand::{Rand, OsRng};
 
     pub struct Generator<E: Engine> {
@@ -189,11 +193,11 @@ mod librustzcash {
     }
 
     impl<E: Engine> VerKey<E> {
-//        pub fn new(sk: &SignKey<E>) -> Self {
-//            VerKey {
-//                point: E::G2Affine::one().mul(sk.x)
-//            }
-//        }
+        pub fn new(sk: &SignKey<E>) -> Self {
+            VerKey {
+                point: E::G2Affine::one().mul(sk.x)
+            }
+        }
 
         pub fn new_with_generator(g: &Generator<E>, sk: &SignKey<E>) -> Self {
             VerKey {
@@ -213,11 +217,11 @@ mod librustzcash {
         point: E::G1
     }
 
-    pub struct AggregatedSignature<E: Engine>(Signature<E>);
+    pub struct MultiSignature<E: Engine>(Signature<E>);
 
-    impl<E: Engine> AggregatedSignature<E> {
+    impl<E: Engine> MultiSignature<E> {
         pub fn new() -> Self {
-            AggregatedSignature(Signature{point: E::G1::zero()})
+            MultiSignature(Signature{point: E::G1::zero()})
         }
 
         pub fn from_signatures(signatures: &[Signature<E>]) -> Self {
@@ -242,6 +246,37 @@ mod librustzcash {
             };
 
             vk.verify(message, g, &self.0)
+        }
+    }
+
+    pub struct AggregatedSignature<E: Engine>(Signature<E>);
+
+    impl<E: Engine> AggregatedSignature<E> {
+        pub fn new() -> Self {
+            AggregatedSignature(Signature{point: E::G1::zero()})
+        }
+
+        pub fn from_signatures(signatures: &[Signature<E>]) -> Self {
+            let mut s = Self::new();
+            for sig in signatures {
+                s.aggregate(sig);
+            }
+            s
+        }
+
+        pub fn aggregate(&mut self, sig: &Signature<E>) {
+            self.0.point.add_assign(&sig.point);
+        }
+
+        pub fn verify(&self, g: &Generator<E>, inputs: &[(&[u8], &VerKey<E>)]) -> bool {
+            let lhs = E::pairing(self.0.point, g.point);
+
+            let mut rhs = E::Fqk::one();
+            for input in inputs {
+                let h = E::G1Affine::hash(input.0);
+                rhs.mul_assign(&E::pairing(h, input.1.point))
+            }
+            lhs == rhs
         }
     }
 
@@ -274,6 +309,7 @@ mod apache {
     use amcl::bls381::pair::{g1mul, g2mul, ate, fexp};
     use amcl::rand::RAND;
     use blake2::digest::Digest;
+    use std::fmt;
     use super::u32_to_u8;
 
     const SIGNATURE_CONTEXT: u32 = 1;
@@ -326,12 +362,12 @@ mod apache {
     }
 
     impl VerKey {
-//        pub fn new(sk: &SignKey) -> Self {
-//            let g = Generator::new();
-//            VerKey {
-//                point: g.point.mul(&sk.x),
-//            }
-//        }
+        pub fn new(sk: &SignKey) -> Self {
+            let g = Generator::new();
+            VerKey {
+                point: g.point.mul(&sk.x),
+            }
+        }
 
         pub fn new_with_generator(g: &Generator, sk: &SignKey) -> Self {
             VerKey {
@@ -369,11 +405,24 @@ mod apache {
         }
     }
 
-    pub struct AggregatedSignature(Signature);
+    impl fmt::Debug for Signature {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "Signature {{ point: {} }}", self.point.to_hex())
+        }
+    }
 
-    impl AggregatedSignature {
+    impl fmt::Display for Signature {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "Signature {{ point: {} }}", self.point.to_hex())
+        }
+    }
+
+
+    pub struct MultiSignature(Signature);
+
+    impl MultiSignature {
 //        pub fn new() -> Self {
-//            AggregatedSignature(Signature::new())
+//            MultiSignature(Signature::new())
 //        }
 
         pub fn from_signatures(signatures: &[Signature]) -> Self {
@@ -381,7 +430,7 @@ mod apache {
             for sig in signatures {
                 asig.point.add(&sig.point);
             }
-            AggregatedSignature(asig)
+            MultiSignature(asig)
         }
 
 //        pub fn aggregate(&mut self, sig: &Signature) {
@@ -396,6 +445,32 @@ mod apache {
             }
             let vk = VerKey { point: aggregated_vk };
             Bls::verify(message, g, &self.0, &vk)
+        }
+    }
+
+    pub struct AggregatedSignature(Signature);
+
+    impl AggregatedSignature {
+        pub fn from_signatures(signatures: &[Signature]) -> Self {
+            let mut asig = Signature::new();
+            for sig in signatures {
+                asig.point.add(&sig.point);
+            }
+            AggregatedSignature(asig)
+        }
+
+        pub fn verify(&self, g: &Generator, inputs: &[(&[u8], &VerKey)]) -> bool {
+            let lhs = Bls::pair(&self.0.point, &g.point);
+
+            let mut rhs = FP12::new();
+            rhs.one();
+
+            for input in inputs {
+                let h = Bls::hash_message(input.0, SIGNATURE_CONTEXT);
+                rhs.mul(&Bls::pair(&h, &input.1.point));
+            }
+            rhs.reduce();
+            lhs == rhs
         }
     }
 
@@ -423,14 +498,14 @@ mod apache {
             Bls::pair(&signature.point, &g.point).eq(&Bls::pair(&point, &vk.point))
         }
 
-        fn hash_message(message: &[u8], ctx: u32) -> ECP {
+        pub fn hash_message(message: &[u8], ctx: u32) -> ECP {
             let mut blake = blake2::Blake2b::new();
             blake.input(u32_to_u8(ctx));
             blake.input(message);
             Bls::from_hash(blake.result().as_slice())
         }
 
-        fn pair(p: &ECP, q: &ECP2) -> FP12 {
+        pub fn pair(p: &ECP, q: &ECP2) -> FP12 {
             let mut result = fexp(&ate(&q, &p));
             result.reduce();
             result
@@ -459,5 +534,5 @@ mod apache {
 }
 
 fn u32_to_u8(i: u32) -> [u8; 4] {
-            [((i >> 24) as u8 & 0xFFu8), ((i >> 16) as u8 & 0xFFu8), ((i >> 8) as u8 & 0xFFu8), i as u8 & 0xFFu8]
-        }
+    [((i >> 24) as u8), ((i >> 16) as u8), ((i >> 8) as u8), i as u8]
+}
