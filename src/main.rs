@@ -1,7 +1,6 @@
 use std::io::{self, Write};
 use std::time::Instant;
 use clap::{Arg, App};
-use sha2::digest::BlockInput;
 
 fn main() {
     let matches = App::new("Milagro vs ZCash BLS signatures")
@@ -91,7 +90,6 @@ fn run_librustzcash(iterations: usize, message: &[u8]) {
     use rand::prelude::*;
     use bls_sigs_ref::*;
     use pairing_plus::bls12_381::{G1, G2};
-    use pairing_plus::CurveProjective;
     use pairing_plus::hash_to_field::ExpandMsgXmd;
 
     const CSUITE: &[u8] = b"BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
@@ -175,7 +173,6 @@ fn get_secret_okm() -> [u8; 48] {
 }
 
 mod apache {
-    use rand::prelude::*;
     use hash2curve::prelude::*;
     use amcl::bls381::rom::CURVE_ORDER;
     use amcl::bls381::big::BIG;
